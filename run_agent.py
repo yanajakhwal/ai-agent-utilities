@@ -78,8 +78,12 @@ def main() -> None:
 
     print("Done.")
     print(f"  ZIP: {result['zip_path']}")
-    print(f"  Files: {result['file_count']}")
-    print(f"  Matter: {result['metadata'].get('matter_number')}")
+    print(f"  Files downloaded: {result['file_count']}")
+    print(f"  Email sent: {'yes' if result.get('email_sent') else 'no'}")
+    print(f"  Email draft: {result.get('email_draft', 'n/a')}")
+    print()
+    print("--- Email body ---")
+    print(result.get("email_body", "(none)"))
 
 
 if __name__ == "__main__":
