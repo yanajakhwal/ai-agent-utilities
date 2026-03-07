@@ -3,7 +3,6 @@
 CLI to run the regulatory document agent.
 
 Usage:
-  python run_agent.py
   python run_agent.py "Hi Agent, can you give me Other Documents from M12205?"
   python run_agent.py --headed "..."   # show browser window (for debugging)
 
@@ -30,9 +29,6 @@ except ImportError:
 
 from agent.orchestrator import run_agent
 
-DEFAULT_MESSAGE = "Hi Agent, can you give me Other Documents from M12205?"
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the regulatory document agent.")
     parser.add_argument(
@@ -42,13 +38,12 @@ def main() -> None:
     )
     parser.add_argument(
         "message",
-        nargs="*",
-        default=None,
+        nargs="+",
         help="Email-style message, e.g. 'Give me Other Documents from M12205'.",
     )
     args = parser.parse_args()
 
-    message = " ".join(args.message) if args.message else DEFAULT_MESSAGE
+    message = " ".join(args.message)
     download_root = Path("./downloads").resolve()
 
     smtp_config = None

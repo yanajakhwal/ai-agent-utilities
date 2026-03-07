@@ -29,13 +29,7 @@ python -m playwright install
 From the `ai-agent-utilities` directory (with your venv activated):
 
 ```bash
-python run_agent.py
-```
-
-Or pass a message:
-
-```bash
-python run_agent.py "Hi Agent, can you give me Other Documents from M12205?"
+python run_agent.py "Hi Agent, can you give me Other Documents from M12383?"
 ```
 
 Without SMTP configured, the agent still parses the message, scrapes the site, and creates the ZIP in `./downloads`; it just won’t send an email.
