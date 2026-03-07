@@ -226,143 +226,158 @@ def fetch_documents_and_metadata(
 
 
 def _download_documents(page: Page, download_dir: Path, matter_number: str) -> List[Path]:
-    """Find up to MAX_DOCS downloadable items on the current page and save them.
+    """Find up to MAX_DOCS downloadable items on the current page.
 
-    The UARB site uses a two-step flow:
-        1. Click "GO GET IT" → a modal dialog appears showing the filename
-        2. Click the filename link inside the dialog → triggers the real download
-        3. Click "Close" to dismiss the dialog
+    The UARB site paginates the document list, so after processing all visible
+    "GO GET IT" buttons we scroll down to reveal more rows and repeat.
+
+    Each "GO GET IT" click opens a modal dialog with the filename; we click
+    the filename inside the modal to trigger the actual download.
     """
     downloaded: List[Path] = []
+    seen_filenames: set[str] = set()
+    scroll_attempts = 0
 
-    go_elements = page.locator("text=/GO GET IT/i")
-    n = go_elements.count()
-    print(f"  [scraper] Found {n} 'GO GET IT' element(s)")
+    while len(downloaded) < MAX_DOCS:
+        go_elements = page.locator("text=/GO GET IT/i")
+        n = go_elements.count()
+        if n == 0:
+            break
+        print(f"  [scraper] Visible 'GO GET IT' buttons: {n}")
 
-    for idx in range(min(n, MAX_DOCS)):
-        el = go_elements.nth(idx)
-        try:
-            el.click(timeout=5_000)
-            page.wait_for_timeout(2000)
+        made_progress = False
+        for idx in range(n):
+            if len(downloaded) >= MAX_DOCS:
+                break
 
-            # Dump what the modal contains so we can see exactly what's there
-            modal_info = page.evaluate("""() => {
-                // Locate the modal via "Download Files" title text
-                const all = [...document.querySelectorAll('*')];
-                let modalY = null;
-                let modalX = null;
-                for (const d of all) {
-                    if (d.textContent.trim() === 'Download Files' && d.children.length === 0) {
-                        const r = d.getBoundingClientRect();
-                        if (r.width > 0) { modalY = r.y; modalX = r.x; break; }
-                    }
-                }
+            el = go_elements.nth(idx)
+            try:
+                el.scroll_into_view_if_needed(timeout=3_000)
+                el.click(force=True, timeout=5_000)
+                page.wait_for_timeout(2000)
 
-                // Collect ALL elements near/inside the modal
-                const items = [];
-                for (const d of all) {
-                    const r = d.getBoundingClientRect();
-                    if (r.width <= 0 || r.height <= 0) continue;
-                    const cx = r.x + r.width / 2;
-                    const cy = r.y + r.height / 2;
-                    // If we found the modal title, restrict to its area
-                    if (modalY !== null) {
-                        if (cy < modalY - 10 || cy > modalY + 300) continue;
-                        if (cx < modalX - 50 || cx > modalX + 500) continue;
-                    }
+                modal_info = _read_modal(page)
 
-                    const tag = d.tagName;
-                    let text = '';
-                    if (tag === 'INPUT' || tag === 'TEXTAREA') {
-                        text = d.value || '';
-                    } else {
-                        text = d.children.length === 0 ? d.textContent.trim() : '';
-                    }
-                    if (!text) continue;
+                link_info = _find_download_target(modal_info.get("items", []))
+                if not link_info:
+                    print(f"  [scraper]   no download target in modal")
+                    _dismiss_modal(page)
+                    continue
 
-                    const href = d.href || '';
-                    items.push({tag, text, href, x: cx, y: cy, w: r.width, h: r.height});
-                }
-                return {modalFound: modalY !== null, items};
-            }""")
+                filename = link_info.get("text", "") or f"{matter_number}_{len(downloaded)+1}.pdf"
+                if not filename.endswith(".pdf"):
+                    filename = f"{matter_number}_{len(downloaded)+1}.pdf"
 
-            if idx == 0:
-                items_preview = modal_info.get("items", [])[:15]
-                for it in items_preview:
-                    print(f"  [scraper]   modal-el: <{it['tag']}> '{it['text'][:60]}' "
-                          f"href={bool(it.get('href'))} {int(it['w'])}x{int(it['h'])}")
+                if filename in seen_filenames:
+                    _dismiss_modal(page)
+                    continue
+                seen_filenames.add(filename)
 
-            # Find the best download target from the modal elements
-            link_info = _find_download_target(modal_info.get("items", []))
+                target = download_dir / filename
+                saved = _try_download(page, link_info, target)
 
-            if not link_info:
-                print(f"  [scraper]   no download target in modal for item {idx + 1}")
+                if saved:
+                    downloaded.append(target)
+                    made_progress = True
+                    print(f"  [scraper]   saved {target.name} ({len(downloaded)}/{MAX_DOCS})")
+                else:
+                    print(f"  [scraper]   could not download {filename}")
+
+                _dismiss_modal(page)
+
+            except Exception as e:
+                print(f"  [scraper]   error on item: {e}")
                 _dismiss_modal(page)
                 continue
 
-            filename = link_info.get("text", "") or f"{matter_number}_{idx + 1}.pdf"
-            if not filename.endswith(".pdf"):
-                filename = f"{matter_number}_{idx + 1}.pdf"
-            target = download_dir / filename
-            print(f"  [scraper]   target: '{filename}' tag=<{link_info.get('tag')}> "
-                  f"href={'yes' if link_info.get('href') else 'no'}")
+        if len(downloaded) >= MAX_DOCS:
+            break
 
-            saved = False
-
-            # Strategy A: direct HTTP download via href
-            if link_info.get("href"):
-                try:
-                    resp = page.request.get(link_info["href"])
-                    if resp.ok and len(resp.body()) > 100:
-                        target.write_bytes(resp.body())
-                        saved = True
-                except Exception:
-                    pass
-
-            # Strategy B: click the element and catch the browser download event
-            if not saved:
-                try:
-                    with page.expect_download(timeout=20_000) as dl_info:
-                        page.mouse.click(link_info["x"], link_info["y"])
-                    dl = dl_info.value
-                    filename = dl.suggested_filename or filename
-                    target = download_dir / filename
-                    dl.save_as(str(target))
-                    saved = True
-                except Exception as e:
-                    print(f"  [scraper]   expect_download failed: {e}")
-
-            # Strategy C: maybe the click opened a new popup/tab with the file
-            if not saved:
-                try:
-                    pages = page.context.pages
-                    if len(pages) > 1:
-                        new_page = pages[-1]
-                        new_page.wait_for_load_state("load", timeout=10_000)
-                        url = new_page.url
-                        if url and url != "about:blank":
-                            resp = page.request.get(url)
-                            if resp.ok and len(resp.body()) > 100:
-                                target.write_bytes(resp.body())
-                                saved = True
-                        new_page.close()
-                except Exception:
-                    pass
-
-            if saved:
-                downloaded.append(target)
-                print(f"  [scraper]   saved {target.name}")
-            else:
-                print(f"  [scraper]   could not download item {idx + 1}")
-
-            _dismiss_modal(page)
-
-        except Exception as e:
-            print(f"  [scraper]   could not open item {idx + 1}: {e}")
-            _dismiss_modal(page)
-            continue
+        # Scroll down to reveal more rows
+        if not made_progress:
+            scroll_attempts += 1
+            if scroll_attempts >= 3:
+                break
+        page.evaluate("window.scrollBy(0, 600)")
+        page.wait_for_timeout(2000)
 
     return downloaded
+
+
+def _read_modal(page: Page) -> Dict:
+    """Read all elements inside the download modal dialog."""
+    return page.evaluate("""() => {
+        const all = [...document.querySelectorAll('*')];
+        let modalY = null, modalX = null;
+        for (const d of all) {
+            if (d.textContent.trim() === 'Download Files' && d.children.length === 0) {
+                const r = d.getBoundingClientRect();
+                if (r.width > 0) { modalY = r.y; modalX = r.x; break; }
+            }
+        }
+        const items = [];
+        for (const d of all) {
+            const r = d.getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            const cx = r.x + r.width / 2;
+            const cy = r.y + r.height / 2;
+            if (modalY !== null) {
+                if (cy < modalY - 10 || cy > modalY + 300) continue;
+                if (cx < modalX - 50 || cx > modalX + 500) continue;
+            }
+            const tag = d.tagName;
+            let text = '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA') text = d.value || '';
+            else text = d.children.length === 0 ? d.textContent.trim() : '';
+            if (!text) continue;
+            items.push({tag, text, href: d.href || '', x: cx, y: cy, w: r.width, h: r.height});
+        }
+        return {modalFound: modalY !== null, items};
+    }""")
+
+
+def _try_download(page: Page, link_info: Dict, target: Path) -> bool:
+    """Attempt to download a file using multiple strategies."""
+    # Strategy A: direct HTTP download via href
+    if link_info.get("href"):
+        try:
+            resp = page.request.get(link_info["href"])
+            if resp.ok and len(resp.body()) > 100:
+                target.write_bytes(resp.body())
+                return True
+        except Exception:
+            pass
+
+    # Strategy B: click and catch browser download event
+    try:
+        with page.expect_download(timeout=20_000) as dl_info:
+            page.mouse.click(link_info["x"], link_info["y"])
+        dl = dl_info.value
+        fname = dl.suggested_filename or target.name
+        final = target.parent / fname
+        dl.save_as(str(final))
+        return True
+    except Exception:
+        pass
+
+    # Strategy C: check if a new tab/popup opened with the file
+    try:
+        pages = page.context.pages
+        if len(pages) > 1:
+            new_page = pages[-1]
+            new_page.wait_for_load_state("load", timeout=10_000)
+            url = new_page.url
+            if url and url != "about:blank":
+                resp = page.request.get(url)
+                if resp.ok and len(resp.body()) > 100:
+                    target.write_bytes(resp.body())
+                    new_page.close()
+                    return True
+            new_page.close()
+    except Exception:
+        pass
+
+    return False
 
 
 def _find_download_target(items: List[Dict]) -> Dict | None:
