@@ -245,7 +245,7 @@ def run_agent(email_text: str, download_root: Path, smtp_config: dict) -> dict:
 
     # 5. Send the email back to the original requester (omitted: parsing 'from' address)
     send_email_with_zip(
-        to_address="requester@example.com",
+        to_address="yjakhwal@uwaterloo.ca",
         subject=f"Documents for {request.matter_number}",
         body=body,
         zip_path=zip_path,

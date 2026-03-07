@@ -7,13 +7,20 @@ from .zipper import create_zip
 from .mailer import send_email_with_zip
 
 
-def run_agent(email_text: str, download_root: Path, smtp_config: Dict[str, Any]) -> Dict[str, Any]:
+def run_agent(
+    email_text: str,
+    download_root: Path,
+    smtp_config: Dict[str, Any] | None = None,
+    to_address: str | None = None,
+    *,
+    headless: bool = True,
+) -> Dict[str, Any]:
     """
     High-level orchestration function:
     - Parse incoming email
     - Scrape documents and metadata
     - Create ZIP archive
-    - Email the result
+    - Optionally email the result (if smtp_config is provided)
     """
     # 1. Parse the incoming email
     request = parse_email(email_text)
@@ -24,6 +31,7 @@ def run_agent(email_text: str, download_root: Path, smtp_config: Dict[str, Any])
         matter_number=request.matter_number,
         document_type=request.document_type,
         download_dir=download_dir,
+        headless=headless,
     )
 
     # 3. Create ZIP archive
@@ -38,18 +46,18 @@ def run_agent(email_text: str, download_root: Path, smtp_config: Dict[str, Any])
         f"Attached are {len(files)} documents matching '{request.document_type}'."
     )
 
-    # 5. Send the email back to the original requester
-    # In a real integration, you'd pass in or derive the requester's address.
-    send_email_with_zip(
-        to_address="requester@example.com",
-        subject=f"Documents for {request.matter_number}",
-        body=body,
-        zip_path=zip_path,
-        smtp_host=smtp_config["host"],
-        smtp_port=smtp_config["port"],
-        smtp_user=smtp_config["user"],
-        smtp_password=smtp_config["password"],
-    )
+    # 5. Send the email if SMTP is configured
+    if smtp_config and to_address:
+        send_email_with_zip(
+            to_address=to_address,
+            subject=f"Documents for {request.matter_number}",
+            body=body,
+            zip_path=zip_path,
+            smtp_host=smtp_config["host"],
+            smtp_port=smtp_config["port"],
+            smtp_user=smtp_config["user"],
+            smtp_password=smtp_config["password"],
+        )
 
     return {
         "zip_path": str(zip_path),

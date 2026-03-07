@@ -24,7 +24,38 @@ pip install -r requirements.txt
 python -m playwright install
 ```
 
-### Running the Agent (Example)
+### Run from the command line
+
+From the `ai-agent-utilities` directory (with your venv activated):
+
+```bash
+python run_agent.py
+```
+
+Or pass a message:
+
+```bash
+python run_agent.py "Hi Agent, can you give me Other Documents from M12205?"
+```
+
+Without SMTP configured, the agent still parses the message, scrapes the site, and creates the ZIP in `./downloads`; it just won’t send an email.
+
+#### Email setup (Gmail → any recipient)
+
+1. Copy the example env file and edit it:
+   ```bash
+   cp .env.example .env
+   ```
+2. In `.env`, set:
+   - `SMTP_USER` = your Gmail address (e.g. `yanajakhwal@gmail.com`)
+   - `SMTP_PASSWORD` = a **Gmail App Password** (not your normal password)
+   - `EMAIL_TO` = recipient (e.g. `yjakhwal@uwaterloo.ca`)
+3. Create a Gmail App Password:
+   - Go to [Google Account → Security → App passwords](https://myaccount.google.com/apppasswords)
+   - Sign in, create an app password for “Mail”, copy the 16-character password into `SMTP_PASSWORD` in `.env`
+4. Run the agent from `ai-agent-utilities`; it will load `.env` and send the ZIP to `EMAIL_TO`.
+
+### Running the Agent (Python API)
 
 The core orchestration function is `run_agent` in `agent/orchestrator.py`.
 
