@@ -27,12 +27,11 @@ def send_email_with_zip(
     )
 
     if smtp_port == 465:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as smtp:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as smtp:
             smtp.login(smtp_user, smtp_password)
             smtp.send_message(msg)
     else:
-        # Port 587 (Gmail) uses STARTTLS
-        with smtplib.SMTP(smtp_host, smtp_port) as smtp:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as smtp:
             smtp.starttls()
             smtp.login(smtp_user, smtp_password)
             smtp.send_message(msg)
