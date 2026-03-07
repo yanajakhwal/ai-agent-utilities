@@ -3,12 +3,12 @@ from dataclasses import dataclass
 
 
 @dataclass
-class EmailRequest:
+class Request:
     matter_number: str
     document_type: str
 
 
-def parse_email(text: str) -> EmailRequest:
+def parse_request(text: str) -> Request:
     """
     Parse free-form email text to extract matter_number and document_type.
 
@@ -25,7 +25,7 @@ def parse_email(text: str) -> EmailRequest:
     )
     document_type = type_match.group(1) if type_match else "All Documents"
 
-    return EmailRequest(
+    return Request(
         matter_number=matter_match.group(0),
         document_type=document_type,
     )

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any
 
-from .email_parser import parse_email
+from .email_parser import parse_request
 from .scraper import fetch_documents_and_metadata
 from .zipper import create_zip
 from .mailer import send_email_with_zip
@@ -23,7 +23,7 @@ def run_agent(
     - Optionally email the result (if smtp_config is provided)
     """
     # 1. Parse the incoming email
-    request = parse_email(email_text)
+    request = parse_request(email_text)
 
     # 2. Fetch documents + metadata from the regulatory site
     download_dir = download_root / request.matter_number

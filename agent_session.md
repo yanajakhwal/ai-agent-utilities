@@ -80,11 +80,11 @@ import re
 from dataclasses import dataclass
 
 @dataclass
-class EmailRequest:
+class Request:
     matter_number: str
     document_type: str
 
-def parse_email(text: str) -> EmailRequest:
+def parse_request(text: str) -> Request:
     """
     Example: 'Hi Agent, can you give me Other Documents from M12205?'
     """
@@ -99,7 +99,7 @@ def parse_email(text: str) -> EmailRequest:
     )
     document_type = type_match.group(1) if type_match else "All Documents"
 
-    return EmailRequest(
+    return Request(
         matter_number=matter_match.group(0),
         document_type=document_type,
     )
@@ -221,7 +221,7 @@ from pathlib import Path
 
 def run_agent(email_text: str, download_root: Path, smtp_config: dict) -> dict:
     # 1. Parse the incoming email
-    request = parse_email(email_text)
+    request = parse_request(email_text)
 
     # 2. Fetch documents + metadata from the regulatory site
     download_dir = download_root / request.matter_number
