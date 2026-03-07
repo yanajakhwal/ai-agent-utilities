@@ -59,28 +59,6 @@ Without SMTP configured, the agent still parses the message, scrapes the site, a
 
 The core orchestration function is `run_agent` in `agent/orchestrator.py`.
 
-Example usage:
-
-```python
-from pathlib import Path
-from agent.orchestrator import run_agent
-
-email_text = "Hi Agent, can you give me Other Documents from M12205?"
-
-result = run_agent(
-    email_text=email_text,
-    download_root=Path("./downloads"),
-    smtp_config={
-        "host": "smtp.example.com",
-        "port": 465,
-        "user": "smtp-user",
-        "password": "smtp-password",
-    },
-)
-
-print(result)
-```
-
 This will:
 
 - Parse the email
